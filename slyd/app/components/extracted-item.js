@@ -33,7 +33,7 @@ export default Ember.Component.extend({
 
     actions: {
         fetchPage: function() {
-            this.sendAction('fetchPage', url);
+            this.sendAction('fetchPage', this.get('url'));
         },
 
         editTemplate: function(templateName) {

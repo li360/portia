@@ -1,5 +1,5 @@
 import Ember from 'ember';
-import { AnnotationSprite, IgnoreSprite, ElementSprite } from './canvas';
+import { AnnotationSprite, IgnoreSprite } from './canvas';
 
 export default Ember.Object.extend({
     _sprites: [],
@@ -17,32 +17,41 @@ export default Ember.Object.extend({
     },
 
     sprites: function() {
-        return this.get('_sprites').map(function(s) {
-            return AnnotationSprite.create({
-                annotation: s,
-                fillColor: s.fillColor,
-                strokeColor: s.strokeColor,
-                textColor: s.textColor
-            });
+        var arr = this.get('_sprites').map(function(s) {
+            if (s.element) {
+                return AnnotationSprite.create({
+                    annotation: s,
+                    fillColor: s.fillColor,
+                    strokeColor: s.strokeColor,
+                    textColor: s.textColor
+                });
+            } else {
+                return null;
+            }
         }).concat(this.get('_ignores').map(function(s) {
-            return IgnoreSprite.create({
-                ignore: s,
-                fillColor: s.fillColor,
-                strokeColor: s.strokeColor,
-                textColor: s.textColor
-            });
-        })).concat(this.get('_elements').map(function(s) {
-            return ElementSprite.create({
-
-            })
+            if (s.element) {
+                return IgnoreSprite.create({
+                    ignore: s,
+                    fillColor: s.fillColor,
+                    strokeColor: s.strokeColor,
+                    textColor: s.textColor
+                });
+            } else {
+                return null;
+            }
         }));
+        return arr.filter(function(s) {
+            if (s) {
+                return true;
+            }
+        });
     }.property('_sprites.@each', '_ignores.@each'),
 
     addSprite: function(element, text) {
         var notFound = true, updated = false;
         this.get('_sprites').forEach(function(sprite) {
             if (Ember.$(sprite.element).get(0) === element) {
-                sprite.name = text;
+                sprite.set('name', text);
                 notFound = false;
                 updated = true;
             }
@@ -66,7 +75,7 @@ export default Ember.Object.extend({
         var notFound = true, updated = false;
         this.get('_ignores').forEach(function(sprite) {
             if (Ember.$(sprite.element).get(0) === element) {
-                sprite.ignoreBeneath = ignoreBeneath;
+                sprite.set('ignoreBeneath', ignoreBeneath);
                 notFound = false;
                 updated = true;
             }
@@ -89,7 +98,7 @@ export default Ember.Object.extend({
     highlight: function(element) {
         this.get('_sprites').forEach(function(sprite) {
             if (Ember.$(sprite.element).get(0) === element) {
-                sprite.highlighted = true;
+                sprite.set('highlighted', true);
             }
         });
         this.notifyPropertyChange('_sprites');
@@ -98,7 +107,7 @@ export default Ember.Object.extend({
     removeHighlight: function(element) {
         this.get('_sprites').forEach(function(sprite) {
             if (Ember.$(sprite.element).get(0) === element) {
-                sprite.highlighted = false;
+                sprite.set('highlighted', false);
             }
         });
         this.notifyPropertyChange('_sprites');

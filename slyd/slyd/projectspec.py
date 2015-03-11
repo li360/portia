@@ -4,9 +4,9 @@ from twisted.web.resource import NoResource, ForbiddenResource
 from jsonschema.exceptions import ValidationError
 from slybot.validation.schema import get_schema_validator
 from .resource import SlydJsonResource
-from .plugins.scrapely_annotations import Annotations
 from .html import html4annotation
 from .errors import BaseHTTPError
+from .utils import short_guid
 
 
 def create_project_resource(spec_manager):
@@ -26,10 +26,6 @@ def convert_template(template):
         template['annotated_body'], template['url'])
 
 
-def annotate_template(template):
-    "Applies the annotations into the template original body."
-
-
 def clean_spider(obj):
     """Removes incomplete data from the spider"""
     if 'init_requests' in obj:
@@ -38,15 +34,37 @@ def clean_spider(obj):
                                 if all(f in req for f in required_fields)]
     if 'start_urls' in obj:
         obj['start_urls'] = list(set(obj['start_urls']))
+    # XXX: Need id to keep track of renames for deploy and export
+    if 'id' not in obj:
+        obj['id'] = short_guid()
+
+
+def add_plugin_data(obj, plugins):
+    try:
+        plugin_data = obj['plugins']
+    except KeyError:
+        plugin_data = {}
+        obj['plugins'] = plugin_data
+    for plugin, opts in plugins:
+        plugin_name = opts['name']
+        try:
+            data = plugin_data[plugin_name]
+        except KeyError:
+            data = {}
+            plugin_data[plugin_name] = {}
+        result = plugin().save_extraction_data(data, obj, opts)
+        obj['plugins'][plugin_name] = result
+    return obj
 
 
 class ProjectSpec(object):
 
     resources = ('project', 'items', 'extractors')
     base_dir = '.'
+    plugins = []
 
     @classmethod
-    def setup(cls, location):
+    def setup(cls, location, **kwargs):
         cls.base_dir = location
 
     def __init__(self, project_name, auth_info):
@@ -245,17 +263,12 @@ class ProjectResource(SlydJsonResource):
                     clean_spider(obj)
                 elif len(rpath) == 3:
                     resource = 'template'
-                    template = obj
                     if obj.get('original_body') is None:
-                        template = project_spec.template_json(rpath[1],
-                                                              rpath[2])
-                    original_body = template.get('original_body', '')
-                    obj['original_body'] = original_body
-                    Annotations().save_extraction_data(None, obj)
-                    # Remove annotations field which is not used by slybot
-                    obj.pop('annotations', None)
+                        templ = project_spec.template_json(rpath[1], rpath[2])
+                        obj['original_body'] = templ.get('original_body', '')
+                    obj = add_plugin_data(obj, project_spec.plugins)
             get_schema_validator(resource).validate(obj)
-        except NotImplementedError:  # (KeyError, IndexError):
+        except (KeyError, IndexError):
             self.error(404, "Not Found", "No such resource")
         except ValidationError as ex:
             self.bad_request("Json failed validation: %s" % ex.message)
